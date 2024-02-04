@@ -2,7 +2,8 @@ obj-m := mmc-mailbox-driver.o
 
 SRC := $(shell pwd)
 
-KERNEL_SRC ?= "/lib/modules/$(shell uname -r)/build"
+#KERNEL_SRC ?= "/lib/modules/$(shell uname -r)/build"
+KERNEL_SRC ?= $(KERN_SRC)
 
 all:
 	$(MAKE) -C $(KERNEL_SRC) M=$(SRC)

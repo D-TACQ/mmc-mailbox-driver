@@ -237,11 +237,13 @@ static int at24_read(void* priv, unsigned int off, void* val, size_t count)
     if (off + count > mmc_mailbox->byte_len)
         return -EINVAL;
 
+#ifdef PGMCOMOUT
     ret = pm_runtime_get_sync(dev);
     if (ret < 0) {
         pm_runtime_put_noidle(dev);
         return ret;
     }
+#endif
 
     /*
    * Read data from chip, protecting against concurrent updates
@@ -255,7 +257,9 @@ static int at24_read(void* priv, unsigned int off, void* val, size_t count)
         ret = at24_regmap_read(mmc_mailbox, buf, off, count);
         if (ret < 0) {
             mutex_unlock(&mmc_mailbox->lock);
+#ifdef PGMCOMOUT	    
             pm_runtime_put(dev);
+#endif
             return ret;
         }
         buf += ret;
@@ -266,8 +270,10 @@ static int at24_read(void* priv, unsigned int off, void* val, size_t count)
     unlock_if_locked(mmc_mailbox, locked);
     mutex_unlock(&mmc_mailbox->lock);
 
-    pm_runtime_put(dev);
 
+#ifdef PGMCOMOUT	    
+    pm_runtime_put(dev);
+#endif
     return 0;
 }
 
@@ -288,11 +294,13 @@ static int at24_write(void* priv, unsigned int off, void* val, size_t count)
     if (off + count > mmc_mailbox->byte_len)
         return -EINVAL;
 
+#ifdef PGMCOMOUT
     ret = pm_runtime_get_sync(dev);
     if (ret < 0) {
         pm_runtime_put_noidle(dev);
         return ret;
     }
+#endif
 
     /*
    * Write data to chip, protecting against concurrent updates
@@ -306,7 +314,9 @@ static int at24_write(void* priv, unsigned int off, void* val, size_t count)
         ret = at24_regmap_write(mmc_mailbox, buf, off, count);
         if (ret < 0) {
             mutex_unlock(&mmc_mailbox->lock);
+#ifdef PGMCOMOUT	    
             pm_runtime_put(dev);
+#endif	    
             return ret;
         }
         buf += ret;
@@ -316,8 +326,9 @@ static int at24_write(void* priv, unsigned int off, void* val, size_t count)
 
     unlock_if_locked(mmc_mailbox, locked);
     mutex_unlock(&mmc_mailbox->lock);
-
+#ifdef PGMCOMOUT
     pm_runtime_put(dev);
+#endif    
 
     return 0;
 }
@@ -410,7 +421,9 @@ static int mmc_mailbox_probe(struct i2c_client* client)
 
     regmap_config.val_bits = 8;
     regmap_config.reg_bits = 16;
+#ifdef PGMCOMOUT    
     regmap_config.disable_locking = true;
+#endif
 
     regmap = devm_regmap_init_i2c(client, &regmap_config);
     if (IS_ERR(regmap))
@@ -444,24 +457,34 @@ static int mmc_mailbox_probe(struct i2c_client* client)
     nvmem_config.word_size = 1;
     nvmem_config.size = byte_len;
 
+#ifdef PGMCOMOUT
     mmc_mailbox->nvmem = devm_nvmem_register(dev, &nvmem_config);
+#else
+    mmc_mailbox->nvmem = nvmem_register(&nvmem_config);
+#endif
     if (IS_ERR(mmc_mailbox->nvmem))
         return PTR_ERR(mmc_mailbox->nvmem);
 
     i2c_set_clientdata(client, mmc_mailbox);
 
+#ifdef PGMCOMOUT    
     /* enable runtime pm */
     pm_runtime_set_active(dev);
     pm_runtime_enable(dev);
-
+#endif
     /*
    * Perform a one-byte test read to verify that the
    * chip is functional.
    */
     err = at24_read(mmc_mailbox, 0, &test_byte, 1);
+#ifdef PGMCOMOUT    
     pm_runtime_idle(dev);
+#endif    
     if (err) {
+#ifdef PGMCOMOUT	    
         pm_runtime_disable(dev);
+#endif
+        dev_err(dev, "one byte read failed %s %d", __FUNCTION__, __LINE__);	
         return -ENODEV;
     }
 
